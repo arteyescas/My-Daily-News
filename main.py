@@ -2,24 +2,31 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
 import datetime
+import sys
 
 def main():
     # 1. Authentication
+    # We explicitly request the scopes needed to EDIT playlists
+    scope = "playlist-modify-public playlist-modify-private"
+    
     auth_manager = SpotifyOAuth(
         client_id=os.environ["SPOTIPY_CLIENT_ID"],
         client_secret=os.environ["SPOTIPY_CLIENT_SECRET"],
         redirect_uri=os.environ["SPOTIPY_REDIRECT_URI"],
-        scope="playlist-modify-public playlist-modify-private"
+        scope=scope
     )
 
-    # Refresh the token manually using the environment variable
+    # Refresh the token manually
     if "SPOTIPY_REFRESH_TOKEN" in os.environ:
         auth_manager.refresh_access_token(os.environ["SPOTIPY_REFRESH_TOKEN"])
+    else:
+        print("Error: SPOTIPY_REFRESH_TOKEN not found in environment variables.")
+        sys.exit(1)
 
     sp = spotipy.Spotify(auth_manager=auth_manager)
 
     # 2. Configuration
-    # PASTE YOUR OUTPUT FROM get_ids.py HERE
+    # Ensure this block matches what you generated with get_ids.py
     SHOW_IDS = [
     "5Gka9laolwx0TzJ0biYpxz", # Tu Shot (by Unknown Publisher)
     "6NohCptkHoUdIvgr7d0C43", # Las Noticias del Día (MX) (by Unknown Publisher)
@@ -34,11 +41,13 @@ def main():
     "2pXBpdfJoAo2iNz5G25nCP", # AM (by Unknown Publisher)
     ]
     
-    PLAYLIST_ID = os.environ["TARGET_PLAYLIST_ID"]
+    PLAYLIST_ID = os.environ.get("TARGET_PLAYLIST_ID")
+    if not PLAYLIST_ID:
+        print("Error: TARGET_PLAYLIST_ID not found in environment variables.")
+        sys.exit(1)
 
     # 3. Find Today's Episodes
-    # We use UTC time because GitHub Actions runs in UTC. 
-    # If it's 6AM in Mexico, it's roughly 12PM/1PM UTC, so "today" matches.
+    # Using UTC because GitHub Actions runs in UTC.
     today = datetime.date.today().isoformat()
     track_uris = []
 
@@ -46,24 +55,38 @@ def main():
 
     for show_id in SHOW_IDS:
         try:
-            # Fetch show details (limit=5 captures multiple daily updates from same show)
+            # Fetch show details
             results = sp.show_episodes(show_id, limit=5, market="MX")
-            items = results['items']
             
-            for item in items:
-                # Check if release date matches today
-                if item['release_date'] == today:
-                    print(f"Found: {item['name']}")
-                    track_uris.append(item['uri'])
+            # FIXED: Check if results exist before accessing items
+            if results and 'items' in results:
+                items = results['items']
+                for item in items:
+                    if item['release_date'] == today:
+                        print(f"Found: {item['name']}")
+                        track_uris.append(item['uri'])
+            else:
+                print(f"Warning: No data returned for show ID {show_id}")
                     
         except Exception as e:
+            # This catches invalid IDs without crashing the whole script
             print(f"Error fetching show {show_id}: {e}")
 
     # 4. Update the Playlist
     if track_uris:
-        # replace_items wipes the playlist and adds new ones (perfect for a daily mix)
-        sp.playlist_replace_items(PLAYLIST_ID, track_uris)
-        print(f"Success! Updated playlist with {len(track_uris)} episodes.")
+        try:
+            print(f"Attempting to update playlist {PLAYLIST_ID}...")
+            sp.playlist_replace_items(PLAYLIST_ID, track_uris)
+            print(f"Success! Updated playlist with {len(track_uris)} episodes.")
+        except spotipy.exceptions.SpotifyException as e:
+            if e.http_status == 403:
+                print("\nCRITICAL ERROR: 403 Forbidden.")
+                print("You do not have permission to edit this playlist.")
+                print("SOLUTION: Please create a NEW playlist in your Spotify account,")
+                print("copy its ID, and update the TARGET_PLAYLIST_ID secret in GitHub.\n")
+            else:
+                print(f"Spotify API Error: {e}")
+            sys.exit(1)
     else:
         print("No new episodes found today.")
 
