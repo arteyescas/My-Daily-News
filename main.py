@@ -4,30 +4,35 @@ import os
 import datetime
 
 def main():
-    # 1. Authentication with Refresh Token
-    # We use a refresh token so this script can run on GitHub without a browser.
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+    # 1. Authentication
+    # We define the auth manager inside main
+    auth_manager = SpotifyOAuth(
         client_id=os.environ["SPOTIPY_CLIENT_ID"],
         client_secret=os.environ["SPOTIPY_CLIENT_SECRET"],
         redirect_uri=os.environ["SPOTIPY_REDIRECT_URI"],
-        scope="playlist-modify-public playlist-modify-private",
-        open_browser=False,
-        cache_handler=None # Disable cache to force refresh
-    ))
+        scope="playlist-modify-public playlist-modify-private"
+    )
+
+    # Refresh the token manually using the environment variable
+    # This updates the internal state of auth_manager
+    auth_manager.refresh_access_token(os.environ["SPOTIPY_REFRESH_TOKEN"])
+
+    # FIXED: This line is now indented so it is inside main() 
+    # and can see 'auth_manager'
+    sp = spotipy.Spotify(auth_manager=auth_manager)
 
     # 2. Configuration
-    # Replace these with the Spotify IDs of your favorite podcasts
-    # (e.g., 'Te lo Cuento', 'Las Noticias del Día MX', etc.)
+    # Replace these with your actual Podcast IDs
     SHOW_IDS = [
         "4rOoJ64cGBp78Ko4U56t7n", # Example: Te lo Cuento
         "3zIpqxGvoQkLyySjDq3P95", # Example: Las Noticias del Día MX
-        # Add the IDs for your other 12 podcasts here...
+        # Add your other IDs here...
     ]
     
-    # The ID of the playlist you want to update
     PLAYLIST_ID = os.environ["TARGET_PLAYLIST_ID"]
 
     # 3. Find Today's Episodes
+    # Note: GitHub servers run on UTC time. 
     today = datetime.date.today().isoformat()
     track_uris = []
 
@@ -36,6 +41,7 @@ def main():
     for show_id in SHOW_IDS:
         try:
             # Fetch show details to get the latest episodes
+            # market="MX" helps ensure you get the version available in your region
             results = sp.show_episodes(show_id, limit=5, market="MX")
             items = results['items']
             
@@ -50,7 +56,6 @@ def main():
 
     # 4. Update the Playlist
     if track_uris:
-        # 'replace=True' clears the old episodes and adds the new ones
         sp.playlist_replace_items(PLAYLIST_ID, track_uris)
         print(f"Success! Updated playlist with {len(track_uris)} episodes.")
     else:
