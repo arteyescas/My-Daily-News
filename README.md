@@ -1,6 +1,4 @@
-# make_readme.py
-
-readme_content = r"""# 📻 My Daily News (Automated Spotify Playlist)
+# 📻 My Daily News (Automated Spotify Playlist)
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
 ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-Automated-green.svg)
@@ -32,7 +30,7 @@ Every morning at **6:00 AM (Mexico City Time)**, this script fetches the latest 
 2.  Create a new App (e.g., "My Daily News").
 3.  **CRITICAL:** Go to **Settings -> User Management** and add your name and the email address associated with your Spotify account. *Without this, the automation will fail with a 403 error.*
 4.  Note your **Client ID** and **Client Secret**.
-5.  Add `http://localhost:8888/callback` (or your chosen URI) to the **Redirect URIs** in Settings.
+5.  Add `http://127.0.0.1:8080/` (or your chosen URI) to the **Redirect URIs** in Settings.
 
 ### 2. Generate Refresh Token
 Since GitHub Actions cannot open a browser to log in, you need a one-time **Refresh Token**. 
@@ -44,8 +42,8 @@ pip install spotipy
 
 # Run generation script (you will need to create this file locally)
 python get_refresh_token.py
-
-readme_content = r"""Authorize the app in the browser and copy the `refresh_token` printed in the terminal.
+```
+Authorize the app in the browser and copy the `refresh_token` printed in the terminal.
 
 ### 3. GitHub Secrets Configuration
 
@@ -58,7 +56,7 @@ To keep your credentials safe, **never** commit them to code. Use GitHub Secrets
 | :--- | :--- |
 | `SPOTIPY_CLIENT_ID` | Your App's Client ID |
 | `SPOTIPY_CLIENT_SECRET` | Your App's Client Secret |
-| `SPOTIPY_REDIRECT_URI` | `http://localhost:8888/callback` (or whatever you set) |
+| `SPOTIPY_REDIRECT_URI` | `http://127.0.0.1:8080/` (or whatever you set) |
 | `SPOTIPY_REFRESH_TOKEN` | The long string generated in Step 2 |
 | `TARGET_PLAYLIST_ID` | The ID of the Spotify Playlist you want to update |
 
@@ -77,9 +75,9 @@ SHOW_IDS = [
     "6o01dGjK3u6GgA36lV6W8f", # Las noticias de la SER
     # Add more IDs here...
 ]
+```
 
-
-readme_content = r"""## ⏰ Automation Schedule
+## ⏰ Automation Schedule
 
 The workflow is defined in `.github/workflows/daily_update.yml`.
 
@@ -92,9 +90,9 @@ To change the time, edit the cron schedule in the YAML file:
 on:
   schedule:
     - cron: '0 13 * * *' # Change '13' to your desired UTC hour
+```
 
-
-readme_content = r"""## ❓ Troubleshooting
+## ❓ Troubleshooting
 
 **Error: `403 Client Error: Forbidden`**
 * **Cause:** Your Spotify App is in "Development Mode" and your email is not whitelisted, OR you are trying to edit a playlist you do not own.
