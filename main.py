@@ -17,11 +17,10 @@ def main():
     sp = spotipy.Spotify(auth=token_info['access_token'])
     user_id = sp.me()['id']
     
-    # 2. TARGET PLAYLIST (Hard-coded name for consistency)
+    # 2. TARGET PLAYLIST
     target_name = "Daily News Summary"
     playlist_id = None
     
-    # Force a search for the playlist
     results = sp.current_user_playlists(limit=50)
     for item in results['items']:
         if item['name'] == target_name:
@@ -32,8 +31,6 @@ def main():
         print(f"Creating new playlist: {target_name}")
         new_pl = sp.user_playlist_create(user_id, target_name, public=True)
         playlist_id = new_pl['id']
-    else:
-        print(f"Found existing playlist: {playlist_id}")
 
     # 3. SEARCH LOGIC
     SHOW_IDS = [
@@ -56,25 +53,33 @@ def main():
                     break
         except: continue
 
-    # 4. UPDATE CONTENT AND DESCRIPTION
+    # 4. THE BYPASS UPDATE (Wipe then Add)
     if track_uris:
         track_uris.reverse()
         try:
-            # We use 'playlist_replace_items' which clears and adds in one go
-            sp.playlist_replace_items(playlist_id, track_uris)
+            # STEP A: GET CURRENT ITEMS
+            current_items = sp.playlist_items(playlist_id, fields='items(track(uri))')
+            current_uris = [item['track']['uri'] for item in current_items['items'] if item['track']]
             
-            # Update Description with Hermosillo Timestamp
-            # (Note: GitHub runners use UTC, so we label it accordingly)
-            now = datetime.datetime.now()
-            new_description = f"Last updated: {now.strftime('%Y-%m-%d %H:%M')} UTC. Fresh news for Lizye."
-            sp.playlist_change_details(playlist_id, description=new_description)
+            # STEP B: REMOVE ALL (Using DELETE method)
+            if current_uris:
+                sp.playlist_remove_all_occurrences_of_items(playlist_id, current_uris)
+                print("Old tracks cleared.")
+
+            # STEP C: ADD NEW (Using POST method)
+            sp.playlist_add_items(playlist_id, track_uris)
             
-            print(f"🚀 SUCCESS! Added {len(track_uris)} episodes to {target_name}")
+            # STEP D: UPDATE DESCRIPTION
+            now_hmo = (datetime.datetime.utcnow() - datetime.timedelta(hours=7)).strftime('%Y-%m-%d %H:%M')
+            new_desc = f"Updated: {now_hmo} (HMO). Daily news for Lizye."
+            sp.playlist_change_details(playlist_id, description=new_desc)
+            
+            print(f"🚀 SUCCESS! {len(track_uris)} episodes added to '{target_name}'.")
         except Exception as e:
             print(f"❌ Update failed: {e}")
             sys.exit(1)
     else:
-        print("No new news found today. Playlist remains as is.")
+        print("No new news found today.")
 
 if __name__ == "__main__":
     main()
