@@ -4,15 +4,11 @@ import os, sys, datetime
 
 def main():
     # 1. AUTHENTICATION
-    client_id = os.environ["SPOTIPY_CLIENT_ID"]
-    client_secret = os.environ["SPOTIPY_CLIENT_SECRET"]
-    redirect_uri = "http://127.0.0.1:5000/callback" 
     scope = "playlist-modify-public playlist-modify-private user-read-email user-read-private"
-
     auth_manager = SpotifyOAuth(
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uri=redirect_uri,
+        client_id=os.environ["SPOTIPY_CLIENT_ID"],
+        client_secret=os.environ["SPOTIPY_CLIENT_SECRET"],
+        redirect_uri="http://127.0.0.1:5000/callback", 
         scope=scope,
         cache_handler=None
     )
@@ -34,12 +30,10 @@ def main():
         "2vLiCH78iiqtRcQe78ADRt", "2pXBpdfJoAo2iNz5G25nCP"
     ]
     
-    # 3. SEARCH LOGIC (Defining track_uris here)
+    # 3. SEARCH LOGIC
     today = datetime.date.today().isoformat()
     yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
     track_uris = []
-
-    print(f"Searching for episodes from {yesterday} and {today}...")
 
     for sid in SHOW_IDS:
         try:
@@ -47,25 +41,33 @@ def main():
             if results and 'items' in results:
                 for item in results['items']:
                     if item['release_date'] in [today, yesterday]:
-                        print(f"Found: {item['name']} ({item['release_date']})")
                         track_uris.append(item['uri'])
                         break
-        except Exception as e:
-            print(f"Skipping show {sid}: {e}")
-            continue
+        except: continue
 
-    # 4. THE UPDATE
+    # 4. THE 2026-SAFE UPDATE (Wipe then Add)
     if track_uris:
+        track_uris.reverse()
+        print(f"Updating playlist {playlist_id}...")
         try:
-            track_uris.reverse() # Put newest episodes at the top
-            print(f"Updating playlist {playlist_id} with {len(track_uris)} tracks...")
-            sp.playlist_replace_items(playlist_id, track_uris)
-            print("🚀 SUCCESS! Your daily news playlist is updated.")
+            # Step A: Clear existing tracks (using DELETE logic instead of PUT)
+            current_tracks = sp.playlist_items(playlist_id, fields='items(track(uri))')
+            current_uris = [item['track']['uri'] for item in current_tracks['items'] if item['track']]
+            
+            if current_uris:
+                # Remove all items (POST/DELETE method)
+                sp.playlist_remove_all_occurrences_of_items(playlist_id, current_uris)
+                print("Existing tracks removed.")
+
+            # Step B: Add new tracks (POST method)
+            sp.playlist_add_items(playlist_id, track_uris)
+            print("🚀 SUCCESS! Your daily news is ready.")
+            
         except Exception as e:
             print(f"❌ Update failed: {e}")
             sys.exit(1)
     else:
-        print("No new episodes found for today or yesterday.")
+        print("No new episodes found.")
 
 if __name__ == "__main__":
     main()
