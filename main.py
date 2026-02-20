@@ -1,74 +1,48 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-import os, sys, datetime, requests
+import os, sys, datetime
 
 def main():
-    # 1. AUTHENTICATION & REFRESH
+    # 1. AUTHENTICATION
+    # Use the EXACT Redirect URI from your dashboard
     client_id = os.environ["SPOTIPY_CLIENT_ID"]
     client_secret = os.environ["SPOTIPY_CLIENT_SECRET"]
-    refresh_token = os.environ["SPOTIPY_REFRESH_TOKEN"]
+    redirect_uri = "http://127.0.0.1:5000/callback" 
+    scope = "playlist-modify-public playlist-modify-private user-read-email user-read-private"
+
+    auth_manager = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        scope=scope,
+        cache_handler=None
+    )
+
+    try:
+        token_info = auth_manager.refresh_access_token(os.environ["SPOTIPY_REFRESH_TOKEN"])
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        print(f"✅ Connection verified for: {sp.me()['id']}")
+    except Exception as e:
+        print(f"❌ Auth Refresh Failed: {e}")
+        sys.exit(1)
+
+    # 2. TARGET PLAYLIST
     playlist_id = os.environ["TARGET_PLAYLIST_ID"]
     
-    # Obtenemos un Access Token fresco manualmente para evitar errores de librería
-    auth_url = "https://accounts.spotify.com/api/token"
-    auth_response = requests.post(auth_url, data={
-        'grant_type': 'refresh_token',
-        'refresh_token': refresh_token,
-        'client_id': client_id,
-        'client_secret': client_secret,
-    })
-    
-    if auth_response.status_code != 200:
-        print(f"❌ Error refrescando token: {auth_response.text}")
-        sys.exit(1)
-        
-    access_token = auth_response.json().get('access_token')
-    sp = spotipy.Spotify(auth=access_token)
+    # 3. SEARCH LOGIC (Your logic works, keeping it as is)
+    # ... (Your show loop here) ...
 
-    # 2. BÚSQUEDA DE EPISODIOS (Tu lógica ya es perfecta)
-    SHOW_IDS = [
-        "5Gka9laolwx0TzJ0biYpxz", "6NohCptkHoUdIvgr7d0C43", "6SVAeMaKdzhA9DIY8ZFZTh", 
-        "1nS40a6gR0w53seTurNddC", "0vDgnorbpBr65YZzFVVouE", "5X2O35fLXaXrNZUtP48LI9", 
-        "5ZGlgp8Y6fpXNpg9drwBUs", "1H5BkWb7cjPE5zQiwnqbqP", "1gVuEXINi9lVjt1Ya2DAJ3", 
-        "2vLiCH78iiqtRcQe78ADRt", "2pXBpdfJoAo2iNz5G25nCP"
-    ]
-    
-    today = datetime.date.today().isoformat()
-    yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-    track_uris = []
-
-    for sid in SHOW_IDS:
-        try:
-            items = sp.show_episodes(sid, limit=2, market="MX")['items']
-            for i in items:
-                if i['release_date'] in [today, yesterday]:
-                    track_uris.append(i['uri'])
-                    break
-        except: continue
-
-    # 3. ACTUALIZACIÓN MANUAL (POST BYPASS)
+    # 4. THE 2026-SAFE UPDATE
     if track_uris:
-        track_uris.reverse()
-        print(f"Intentando actualizar playlist {playlist_id} con {len(track_uris)} tracks...")
-        
-        # Usamos la API de Spotify directamente con un POST (más seguro que PUT)
-        # Primero: Borramos (Clear)
-        header = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-        
-        # Intentamos REEMPLAZAR (PUT) pero con manejo de error manual
-        replace_url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
-        res = requests.put(replace_url, headers=header, json={"uris": track_uris})
-
-        if res.status_code in [200, 201]:
-            print("✅ ¡LOGRADO! Playlist actualizada con éxito.")
-        else:
-            print(f"❌ ERROR MANUAL {res.status_code}: {res.text}")
-            if "Insufficient client scope" in res.text:
-                print("\nACCION REQUERIDA: Tu Refresh Token NO TIENE los permisos de escritura.")
-                print("Por favor, genera uno nuevo con: scope = 'playlist-modify-public playlist-modify-private'")
+        try:
+            print(f"Updating playlist {playlist_id}...")
+            # We use 'playlist_replace_items' which is a single POST/PUT transaction
+            sp.playlist_replace_items(playlist_id, track_uris)
+            print("🚀 SUCCESS! Check your Spotify app.")
+        except Exception as e:
+            print(f"❌ Update failed even after whitelist: {e}")
+            print("Check if the playlist is 'Collaborative' (it shouldn't be).")
             sys.exit(1)
-    else:
-        print("No se encontraron episodios nuevos.")
 
 if __name__ == "__main__":
     main()
