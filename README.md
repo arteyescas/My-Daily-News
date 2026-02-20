@@ -30,7 +30,7 @@ Every morning at **6:00 AM (Mexico City Time)**, this script fetches the latest 
 2.  Create a new App (e.g., "My Daily News").
 3.  **CRITICAL:** Go to **Settings -> User Management** and add your name and the email address associated with your Spotify account. *Without this, the automation will fail with a 403 error.*
 4.  Note your **Client ID** and **Client Secret**.
-5.  Add `http://127.0.0.1:8080/` (or your chosen URI) to the **Redirect URIs** in Settings.
+5.  Add `http://127.0.0.1:5000/callback` (or your chosen URI) to the **Redirect URIs** in Settings.
 
 ### 2. Generate Refresh Token
 Since GitHub Actions cannot open a browser to log in, you need a one-time **Refresh Token**. 
