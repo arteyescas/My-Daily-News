@@ -13,13 +13,29 @@ def main():
         cache_handler=None
     )
     
-    # Refresh token
     token_info = auth_manager.refresh_access_token(os.environ["SPOTIPY_REFRESH_TOKEN"])
     sp = spotipy.Spotify(auth=token_info['access_token'])
     
-    PLAYLIST_ID = os.environ["TARGET_PLAYLIST_ID"]
+    # 2. FIND OR CREATE THE PLAYLIST
+    # We look for a playlist we've created before to avoid 403 on specific IDs
+    user_id = sp.me()['id']
+    target_name = "Daily News Summary"
+    playlist_id = None
     
-    # 2. PODCAST LIST
+    print(f"Logged in as: {user_id}")
+    
+    user_playlists = sp.current_user_playlists()
+    for pl in user_playlists['items']:
+        if pl['name'] == target_name:
+            playlist_id = pl['id']
+            break
+            
+    if not playlist_id:
+        print(f"Playlist '{target_name}' not found. Creating a new one...")
+        new_pl = sp.user_playlist_create(user_id, target_name, public=True, description="Updated daily by AI")
+        playlist_id = new_pl['id']
+
+    # 3. SEARCH LOGIC (Your logic is working perfectly)
     SHOW_IDS = [
         "5Gka9laolwx0TzJ0biYpxz", "6NohCptkHoUdIvgr7d0C43", "6SVAeMaKdzhA9DIY8ZFZTh", 
         "1nS40a6gR0w53seTurNddC", "0vDgnorbpBr65YZzFVVouE", "5X2O35fLXaXrNZUtP48LI9", 
@@ -27,49 +43,32 @@ def main():
         "2vLiCH78iiqtRcQe78ADRt", "2pXBpdfJoAo2iNz5G25nCP"
     ]
     
-    # 3. DATE LOGIC
     today = datetime.date.today().isoformat()
     yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
     track_uris = []
 
-    print(f"Searching for episodes from {yesterday} and {today}...")
-
     for sid in SHOW_IDS:
         try:
-            results = sp.show_episodes(sid, limit=2, market="MX")
-            if results and 'items' in results:
-                for item in results['items']:
-                    if item['release_date'] in [today, yesterday]:
-                        print(f"Found: {item['name']}")
-                        track_uris.append(item['uri'])
-                        break
+            items = sp.show_episodes(sid, limit=2, market="MX")['items']
+            for i in items:
+                if i['release_date'] in [today, yesterday]:
+                    track_uris.append(i['uri'])
+                    break
         except: continue
 
-    # 4. THE 2026-SAFE UPDATE (No PUT allowed)
+    # 4. UPDATE (Using the ID we just verified)
     if track_uris:
         track_uris.reverse()
-        print(f"Updating playlist with {len(track_uris)} tracks...")
-        
         try:
-            # STEP A: CLEAR THE PLAYLIST (Using a specific item removal)
-            # We get current tracks first
-            current_tracks = sp.playlist_tracks(PLAYLIST_ID, fields="items(track(uri))")
-            current_uris = [t['track']['uri'] for t in current_tracks['items'] if t['track']]
-            
-            if current_uris:
-                # This uses DELETE instead of PUT
-                sp.playlist_remove_all_occurrences_of_items(PLAYLIST_ID, current_uris)
-                print("Playlist cleared.")
-
-            # STEP B: ADD NEW TRACKS (Using POST)
-            sp.playlist_add_items(PLAYLIST_ID, track_uris)
-            print("✅ SUCCESS! Your daily news is ready.")
-            
+            print(f"Updating '{target_name}' ({playlist_id}) with {len(track_uris)} tracks...")
+            # Using replace_items on a playlist we JUST verified/created
+            sp.playlist_replace_items(playlist_id, track_uris)
+            print("✅ SUCCESS!")
         except Exception as e:
-            print(f"❌ ERROR at update: {e}")
+            print(f"❌ Update failed: {e}")
             sys.exit(1)
     else:
-        print("No new episodes found.")
+        print("No episodes found today.")
 
 if __name__ == "__main__":
     main()
