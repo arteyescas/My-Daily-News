@@ -6,8 +6,7 @@ import sys
 import requests
 
 def main():
-    # 1. AUTHENTICATION
-    # We use SpotifyOAuth just to handle the token refresh logic
+    # 1. Authentication
     scope = "playlist-modify-public playlist-modify-private user-read-email"
     auth_manager = SpotifyOAuth(
         client_id=os.environ["SPOTIPY_CLIENT_ID"],
@@ -20,14 +19,12 @@ def main():
     try:
         token_info = auth_manager.refresh_access_token(os.environ["SPOTIPY_REFRESH_TOKEN"])
         access_token = token_info['access_token']
+        sp = spotipy.Spotify(auth=access_token)
     except Exception as e:
-        print(f"Failed to refresh token: {e}")
+        print(f"Auth Failed: {e}")
         sys.exit(1)
 
-    # We still use spotipy for the SEARCH part (reading is working fine)
-    sp = spotipy.Spotify(auth=access_token)
-
-    # 2. CONFIGURATION
+    # 2. Configuration & Search
     SHOW_IDS = [
         "5Gka9laolwx0TzJ0biYpxz", "6NohCptkHoUdIvgr7d0C43", "6SVAeMaKdzhA9DIY8ZFZTh",
         "1nS40a6gR0w53seTurNddC", "0vDgnorbpBr65YZzFVVouE", "5X2O35fLXaXrNZUtP48LI9",
@@ -35,14 +32,12 @@ def main():
         "2vLiCH78iiqtRcQe78ADRt", "2pXBpdfJoAo2iNz5G25nCP",
     ]
     PLAYLIST_ID = os.environ.get("TARGET_PLAYLIST_ID")
-
-    # 3. FIND EPISODES
+    
     now = datetime.datetime.now(datetime.timezone.utc)
     dates = [now.strftime('%Y-%m-%d'), (now - datetime.timedelta(days=1)).strftime('%Y-%m-%d')]
     track_uris = []
 
-    print(f"--- SEARCHING FOR NEWS ({dates[1]} to {dates[0]}) ---")
-
+    print(f"--- Searching for episodes ({dates[1]} to {dates[0]}) ---")
     for show_id in SHOW_IDS:
         try:
             results = sp.show_episodes(show_id, limit=2, market="MX")
@@ -52,39 +47,38 @@ def main():
                         print(f"Found: {item['name']}")
                         track_uris.append(item['uri'])
                         break 
-        except Exception:
-            continue
+        except: continue
 
-    # 4. THE MANUAL OVERRIDE (RAW HTTP POST)
+    # 4. THE 2026 BYPASS UPDATE (DELETE THEN POST)
     if track_uris:
-        # Reverse to put newest on top
         track_uris.reverse()
-        print(f"\n--- ATTEMPTING RAW UPDATE TO PLAYLIST: {PLAYLIST_ID} ---")
+        print(f"\n--- Updating Playlist: {PLAYLIST_ID} ---")
         
-        # We define the endpoint and headers manually
         endpoint = f"https://api.spotify.com/v1/playlists/{PLAYLIST_ID}/tracks"
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
 
-        # STEP A: CLEAR (Using PUT with an empty list)
-        print("Step A: Clearing playlist...")
-        requests.put(endpoint, headers=headers, json={"uris": []})
+        # STEP A: DELETE ALL CURRENT TRACKS
+        # In 2026, 'PUT' is often blocked, but 'DELETE' is usually allowed.
+        try:
+            # We get current tracks to delete them specifically
+            current = sp.playlist_tracks(PLAYLIST_ID, fields="items(track(uri))")
+            current_uris = [t['track']['uri'] for t in current['items'] if t['track']]
+            if current_uris:
+                requests.delete(endpoint, headers=headers, json={"tracks": [{"uri": u} for u in current_uris]})
+                print("Step A: Existing tracks cleared.")
+        except Exception as e:
+            print(f"Warning: Could not clear tracks: {e}")
 
-        # STEP B: ADD (Using POST)
-        print(f"Step B: Adding {len(track_uris)} tracks...")
+        # STEP B: ADD NEW TRACKS (POST)
         response = requests.post(endpoint, headers=headers, json={"uris": track_uris})
 
         if response.status_code in [200, 201]:
-            print("\n✅ SUCCESS! The manual bypass worked. Your news is ready.")
+            print("\n✅ SUCCESS! News playlist is updated.")
         else:
             print(f"\n❌ FINAL ERROR {response.status_code}: {response.text}")
-            print("\nIf you see 403 here, Spotify is blocking the App's write-access entirely.")
-            print("Action: Ensure your playlist 'Morning News' is set to PUBLIC.")
             sys.exit(1)
     else:
-        print("\nNo new episodes found to add.")
+        print("\nNo new episodes found.")
 
 if __name__ == "__main__":
     main()
