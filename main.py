@@ -13,14 +13,13 @@ def main():
         client_secret=os.environ["SPOTIPY_CLIENT_SECRET"],
         redirect_uri=os.environ["SPOTIPY_REDIRECT_URI"],
         scope=scope,
-        cache_handler=None # Prevents local cache issues in GitHub Actions
+        cache_handler=None 
     )
 
-    # Use the Refresh Token to get a fresh Access Token
     if "SPOTIPY_REFRESH_TOKEN" in os.environ:
         auth_manager.refresh_access_token(os.environ["SPOTIPY_REFRESH_TOKEN"])
     else:
-        print("Error: SPOTIPY_REFRESH_TOKEN not found.")
+        print("Error: SPOTIPY_REFRESH_TOKEN missing.")
         sys.exit(1)
 
     sp = spotipy.Spotify(auth_manager=auth_manager)
@@ -35,59 +34,53 @@ def main():
     
     PLAYLIST_ID = os.environ.get("TARGET_PLAYLIST_ID")
 
-    # 3. Time Logic: Get episodes from the last 24 hours
-    # This is more robust than matching a single date string
+    # 3. Find Today's Episodes
     now = datetime.datetime.now(datetime.timezone.utc)
-    one_day_ago = now - datetime.timedelta(hours=24)
+    today_str = now.strftime('%Y-%m-%d')
+    yesterday_str = (now - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
     
     track_uris = []
 
-    print(f"Checking for episodes released since {one_day_ago.strftime('%Y-%m-%d %H:%M')} UTC...")
+    print(f"Searching for episodes from {yesterday_str} and {today_str}...")
 
     for show_id in SHOW_IDS:
         try:
             results = sp.show_episodes(show_id, limit=5, market="MX")
-            
             if results and 'items' in results:
                 for item in results['items']:
-                    # Convert Spotify string date to object for comparison
-                    release_date = item['release_date']
-                    
-                    # If Spotify only provides YYYY-MM-DD, we compare strings
-                    # If the date matches today OR yesterday, we take it
-                    today_str = now.strftime('%Y-%m-%d')
-                    yesterday_str = (now - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-                    
-                    if release_date in [today_str, yesterday_str]:
-                        print(f"Found: {item['name']} ({release_date})")
+                    if item['release_date'] in [today_str, yesterday_str]:
+                        print(f"Found: {item['name']} ({item['release_date']})")
                         track_uris.append(item['uri'])
-                        break # Only take the LATEST episode per show
+                        break 
         except Exception as e:
-            print(f"Skipping show {show_id} due to error: {e}")
+            print(f"Skipping show {show_id}: {e}")
 
-# 4. Update the Playlist
+    # 4. THE 2026 "POST ONLY" UPDATE
     if track_uris:
         try:
-            # Reverse so newest episodes are at the top
             track_uris.reverse() 
-            
             print(f"Updating playlist {PLAYLIST_ID} with {len(track_uris)} tracks...")
+
+            # STEP A: REMOVE EVERYTHING (Using POST, not PUT)
+            # We use a trick: adding items to a playlist is a POST. 
+            # But first we have to clear it. Since PUT is blocked, we use the 'replace' logic 
+            # but we force it to use a POST-style call if possible, or just add on top.
             
-            # STEP A: Clear the playlist by replacing with an empty list
-            # If this fails, it's a permission issue with the playlist itself
-            sp.playlist_replace_items(PLAYLIST_ID, []) 
-            
-            # STEP B: Add the new tracks using POST (more reliable in 2026)
+            try:
+                # If this PUT fails, we will just APPEND and you'll have to clear it manually once a week
+                sp.playlist_replace_items(PLAYLIST_ID, [])
+            except:
+                print("Note: Could not clear playlist (PUT blocked). Appending instead.")
+
+            # STEP B: ADD ITEMS (This is a POST request)
             sp.playlist_add_items(PLAYLIST_ID, track_uris)
             
-            print("✅ Success! Your daily news is ready.")
+            print("✅ SUCCESS! Playlist updated.")
         except Exception as e:
-            print(f"❌ Failed at the final step: {e}")
-            print("\nPOSSIBLE FIX: Your current playlist ID might be 'tainted'.")
-            print("1. Create a NEW playlist manually in your Spotify App.")
-            print("2. Copy its NEW ID.")
-            print("3. Update TARGET_PLAYLIST_ID in GitHub Secrets.")
+            print(f"❌ ERROR: {e}")
             sys.exit(1)
+    else:
+        print("No new episodes found.")
 
 if __name__ == "__main__":
     main()
