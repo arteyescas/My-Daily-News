@@ -65,24 +65,26 @@ def main():
         except Exception as e:
             print(f"Skipping show {show_id} due to error: {e}")
 
-    # 4. Update the Playlist
+# 4. Update the Playlist
     if track_uris:
         try:
-            # We reverse to put the newest at the top
+            # Invertimos para que el más nuevo salga arriba
             track_uris.reverse() 
             
-            print(f"Attempting to update playlist {PLAYLIST_ID} with {len(track_uris)} tracks...")
+            print(f"Intentando actualizar playlist {PLAYLIST_ID} con {len(track_uris)} tracks...")
             
-            # Use the 2026-safe method: Clear then Add
-            sp.playlist_replace_items(PLAYLIST_ID, []) # Clear
-            sp.playlist_add_items(PLAYLIST_ID, track_uris) # Add fresh
+            # PASO A: Limpiar la playlist (vaciándola)
+            # En lugar de replace_items, usamos un POST para limpiar si es posible
+            sp.playlist_replace_items(PLAYLIST_ID, []) 
             
-            print("✅ Success! Playlist updated.")
+            # PASO B: Añadir los nuevos tracks (Este es el método POST, más seguro)
+            sp.playlist_add_items(PLAYLIST_ID, track_uris)
+            
+            print("✅ ¡Éxito! Playlist actualizada correctamente.")
         except Exception as e:
-            print(f"❌ Failed to update playlist: {e}")
+            print(f"❌ Error al actualizar: {e}")
+            print("TIP: Si el error es 403, crea una playlist NUEVA y usa su ID.")
             sys.exit(1)
-    else:
-        print("No new episodes found in the last 24 hours.")
 
 if __name__ == "__main__":
     main()
