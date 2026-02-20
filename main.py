@@ -68,22 +68,25 @@ def main():
 # 4. Update the Playlist
     if track_uris:
         try:
-            # Invertimos para que el más nuevo salga arriba
+            # Reverse so newest episodes are at the top
             track_uris.reverse() 
             
-            print(f"Intentando actualizar playlist {PLAYLIST_ID} con {len(track_uris)} tracks...")
+            print(f"Updating playlist {PLAYLIST_ID} with {len(track_uris)} tracks...")
             
-            # PASO A: Limpiar la playlist (vaciándola)
-            # En lugar de replace_items, usamos un POST para limpiar si es posible
+            # STEP A: Clear the playlist by replacing with an empty list
+            # If this fails, it's a permission issue with the playlist itself
             sp.playlist_replace_items(PLAYLIST_ID, []) 
             
-            # PASO B: Añadir los nuevos tracks (Este es el método POST, más seguro)
+            # STEP B: Add the new tracks using POST (more reliable in 2026)
             sp.playlist_add_items(PLAYLIST_ID, track_uris)
             
-            print("✅ ¡Éxito! Playlist actualizada correctamente.")
+            print("✅ Success! Your daily news is ready.")
         except Exception as e:
-            print(f"❌ Error al actualizar: {e}")
-            print("TIP: Si el error es 403, crea una playlist NUEVA y usa su ID.")
+            print(f"❌ Failed at the final step: {e}")
+            print("\nPOSSIBLE FIX: Your current playlist ID might be 'tainted'.")
+            print("1. Create a NEW playlist manually in your Spotify App.")
+            print("2. Copy its NEW ID.")
+            print("3. Update TARGET_PLAYLIST_ID in GitHub Secrets.")
             sys.exit(1)
 
 if __name__ == "__main__":
