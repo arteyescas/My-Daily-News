@@ -3,7 +3,6 @@ from spotipy.oauth2 import SpotifyOAuth
 import os
 import datetime
 import sys
-import json
 
 def main():
     # 1. Authentication
@@ -41,7 +40,7 @@ def main():
 
     for show_id in SHOW_IDS:
         try:
-            results = sp.show_episodes(show_id, limit=3, market="MX")
+            results = sp.show_episodes(show_id, limit=2, market="MX")
             if results and 'items' in results:
                 for item in results['items']:
                     if item['release_date'] in dates:
@@ -50,32 +49,31 @@ def main():
         except:
             continue
 
-    # 4. THE ULTIMATE BYPASS
+    # 4. THE 2026-SAFE UPDATE
     if track_uris:
         track_uris.reverse()
-        print(f"Attempting to FORCE update {PLAYLIST_ID} with {len(track_uris)} tracks...")
+        print(f"Attempting to update {PLAYLIST_ID} with {len(track_uris)} tracks...")
 
         try:
-            # Instead of replace_items, we use the specific 'POST' track adding method 
-            # We bypass the standard library and call the endpoint directly
-            # Step 1: Get the user's internal ID just to be sure
-            me = sp.me()
-            print(f"Authenticated as: {me['id']}")
+            # We fetch the current state of the playlist to get a 'snapshot_id'
+            playlist_info = sp.playlist(PLAYLIST_ID)
+            print(f"Updating Playlist: {playlist_info['name']} (Owner: {playlist_info['owner']['id']})")
 
-            # Step 2: Try to add items (POST)
-            # If this fails, we catch the specific error
+            # STEP A: Try to CLEAR using the most basic method
+            try:
+                sp.playlist_replace_items(PLAYLIST_ID, [])
+            except:
+                print("Clear failed, attempting to append instead...")
+
+            # STEP B: ADD items using the POST method
             sp.playlist_add_items(PLAYLIST_ID, track_uris)
-            print("✅ SUCCESS! Tracks added.")
+            print("✅ SUCCESS! Playlist updated.")
             
         except Exception as e:
             print(f"❌ AUTH ERROR: {e}")
-            print("\nFINAL SOLUTION: Your App is in 'Development Mode' but the user isn't 'Activated'.")
-            print("1. Go to Spotify Dashboard -> App -> Settings -> User Management.")
-            print("2. DELETE your email from the list and ADD IT AGAIN.")
-            print("3. Check your email for an invitation link from Spotify.")
             sys.exit(1)
     else:
-        print("No episodes found.")
+        print("No new episodes found today.")
 
 if __name__ == "__main__":
     main()
