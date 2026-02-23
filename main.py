@@ -28,33 +28,48 @@ def main():
         "User-Agent": "Mozilla/5.0" # Identificador para evitar bloqueos de seguridad
     }
     
-    # 2. BUSCAR O CREAR PLAYLIST (Endpoint 2026)
+  # 2. BUSCAR O CREAR PLAYLIST (Con manejo de error robusto)
     target_name = "Daily News Summary"
     playlist_id = None
     
     print("Obteniendo playlists...")
-    pl_res = requests.get("https://t1.gstatic.com/faviconV2?url=https://developer.spotify.com/&client=BARD&type=FAVICON&size=256&fallback_opts=TYPE,SIZE,URL", headers=headers)
-    
-    if pl_res.status_code == 200:
-        playlists_data = pl_res.json()
-        for pl in playlists_data.get('items', []):
-            if pl['name'] == target_name:
-                playlist_id = pl['id']
-                break
-    else:
-        print(f"⚠️ No se pudo leer playlists. Status: {pl_res.status_code}, Msg: {pl_res.text}")
-
-    if not playlist_id:
-        print(f"Creando playlist '{target_name}'...")
-        create_res = requests.post(
-            "https://t1.gstatic.com/faviconV2?url=https://developer.spotify.com/&client=BARD&type=FAVICON&size=256&fallback_opts=TYPE,SIZE,URL",
-            headers=headers,
-            json={"name": target_name, "public": True}
-        )
-        if create_res.status_code in [200, 201]:
-            playlist_id = create_res.json()['id']
+    try:
+        pl_res = requests.get("https://api.spotify.com/v1/me/playlists", headers=headers, timeout=10)
+        
+        if pl_res.status_code == 200:
+            try:
+                playlists_data = pl_res.json()
+                for pl in playlists_data.get('items', []):
+                    if pl['name'] == target_name:
+                        playlist_id = pl['id']
+                        break
+            except Exception as e:
+                print(f"⚠️ Error al procesar JSON de playlists: {e}")
         else:
-            print(f"❌ Falló creación: {create_res.text}")
+            print(f"⚠️ Spotify devolvió error {pl_res.status_code}. Respuesta: {pl_res.text[:100]}")
+            
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Error de conexión al buscar playlists: {e}")
+
+    # Si no se encontró ID (por error o porque no existe), intentamos crearla
+    if not playlist_id:
+        print(f"Intentando crear/verificar playlist '{target_name}'...")
+        try:
+            create_res = requests.post(
+                "https://api.spotify.com/v1/me/playlists",
+                headers=headers,
+                json={"name": target_name, "public": True},
+                timeout=10
+            )
+            if create_res.status_code in [200, 201]:
+                playlist_id = create_res.json()['id']
+                print(f"✅ Playlist lista: {playlist_id}")
+            else:
+                print(f"❌ No se pudo crear la playlist: {create_res.status_code} - {create_res.text}")
+                # Si esto falla, no podemos continuar
+                sys.exit(1)
+        except Exception as e:
+            print(f"❌ Error crítico en creación: {e}")
             sys.exit(1)
 
     # 3. BÚSQUEDA DE EPISODIOS
